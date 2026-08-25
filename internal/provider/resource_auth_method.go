@@ -8,19 +8,23 @@ import (
 	"terraform-provider-clearpass/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/objectplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 // Ensure provider defined types fully satisfy framework interfaces.
 var _ resource.Resource = &AuthMethodResource{}
 var _ resource.ResourceWithImportState = &AuthMethodResource{}
+var _ resource.ResourceWithUpgradeState = &AuthMethodResource{}
 
 func NewAuthMethodResource() resource.Resource {
 	return &AuthMethodResource{}
@@ -33,12 +37,12 @@ type AuthMethodResource struct {
 
 // AuthMethodResourceModel describes the resource data model.
 type AuthMethodResourceModel struct {
-	ID           types.String             `tfsdk:"id"`
-	Name         types.String             `tfsdk:"name"`
-	Description  types.String             `tfsdk:"description"`
-	MethodType   types.String             `tfsdk:"method_type"`
-	InnerMethods types.List               `tfsdk:"inner_methods"`
-	Details      []AuthMethodDetailsModel `tfsdk:"details"`
+	ID           types.String   `tfsdk:"id"`
+	Name         types.String   `tfsdk:"name"`
+	Description  types.String   `tfsdk:"description"`
+	MethodType   types.String   `tfsdk:"method_type"`
+	InnerMethods types.List     `tfsdk:"inner_methods"`
+	Details types.Object        `tfsdk:"details"`
 }
 
 type AuthMethodDetailsModel struct {
@@ -78,6 +82,384 @@ type AuthMethodDetailsModel struct {
 	NoOfRetries                       types.Int64  `tfsdk:"no_of_retries"`
 }
 
+var authMethodDetailsAttrTypes = map[string]attr.Type{
+	"tunnel_pac_lifetime":                   types.Int64Type,
+	"tunnel_pac_lifetime_units":             types.StringType,
+	"user_auth_pac_enable":                  types.BoolType,
+	"user_auth_pac_lifetime":                types.Int64Type,
+	"user_auth_pac_lifetime_units":          types.StringType,
+	"machine_pac_enable":                    types.BoolType,
+	"machine_pac_lifetime":                  types.Int64Type,
+	"machine_pac_lifetime_units":            types.StringType,
+	"posture_pac_enable":                    types.BoolType,
+	"posture_pac_lifetime":                  types.Int64Type,
+	"posture_pac_lifetime_units":            types.StringType,
+	"allow_anonymous_provisioning":          types.BoolType,
+	"auth_provisioning_require_client_cert": types.BoolType,
+	"client_certificate_auth":               types.BoolType,
+	"allow_authenticated_provisioning":      types.BoolType,
+	"certificate_comparison":                types.StringType,
+	"session_timeout":                       types.Int64Type,
+	"session_cache_enable":                  types.BoolType,
+	"challenge":                             types.StringType,
+	"allow_fast_reconnect":                  types.BoolType,
+	"nap_support_enable":                    types.BoolType,
+	"enforce_crypto_binding":                types.StringType,
+	"public_password":                       types.StringType,
+	"public_username":                       types.StringType,
+	"group_name":                            types.StringType,
+	"server_id":                             types.StringType,
+	"autz_required":                         types.BoolType,
+	"ocsp_enable":                           types.StringType,
+	"ocsp_url":                              types.StringType,
+	"override_cert_url":                     types.BoolType,
+	"encryption_scheme":                     types.StringType,
+	"allow_unknown_clients":                 types.BoolType,
+	"pass_reset_flow":                       types.StringType,
+	"no_of_retries":                         types.Int64Type,
+}
+
+func authMethodDetailsAttributes() map[string]schema.Attribute {
+	return map[string]schema.Attribute{
+		"tunnel_pac_lifetime": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Tunnel PAC Expire Time",
+		},
+		"tunnel_pac_lifetime_units": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Tunnel PAC Expire Time Units",
+		},
+		"user_auth_pac_enable": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Authorization PAC",
+		},
+		"user_auth_pac_lifetime": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Authorization PAC Expire Time",
+		},
+		"user_auth_pac_lifetime_units": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Authorization PAC Expire Time Units",
+		},
+		"machine_pac_enable": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Machine PAC",
+		},
+		"machine_pac_lifetime": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Machine PAC Expire Time",
+		},
+		"machine_pac_lifetime_units": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Machine PAC Expire Time Units",
+		},
+		"posture_pac_enable": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Posture PAC",
+		},
+		"posture_pac_lifetime": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Posture PAC Expire Time",
+		},
+		"posture_pac_lifetime_units": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Posture PAC Expire Time Units",
+		},
+		"allow_anonymous_provisioning": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Allow anonymous mode (requires no server certificate)",
+		},
+		"auth_provisioning_require_client_cert": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Require end-host certificate for provisioning",
+		},
+		"client_certificate_auth": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "End-Host Authentication",
+		},
+		"allow_authenticated_provisioning": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Allow authenticated mode (requires server certificate)",
+		},
+		"certificate_comparison": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Certificate Comparison. One of: none, dn, cn, san, cn_or_san, binary",
+			Validators: []validator.String{
+				stringvalidator.OneOf("none", "dn", "cn", "san", "cn_or_san", "binary"),
+			},
+		},
+		"session_timeout": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Session Timeout",
+		},
+		"session_cache_enable": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Session Resumption",
+		},
+		"challenge": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Challenge",
+		},
+		"allow_fast_reconnect": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Fast Reconnect",
+		},
+		"nap_support_enable": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Microsoft NAP Support",
+		},
+		"enforce_crypto_binding": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Cryptobinding. One of: none, optional, required",
+			Validators: []validator.String{
+				stringvalidator.OneOf("none", "optional", "required"),
+			},
+		},
+		"public_password": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			Sensitive:           true,
+			MarkdownDescription: "Public Password",
+		},
+		"public_username": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Public Username",
+		},
+		"group_name": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Group",
+		},
+		"server_id": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Server Id",
+		},
+		"autz_required": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Authorization Required. If enabled, the user must be authorized in addition to being authenticated.",
+		},
+		"ocsp_enable": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Verify Certificate using OCSP. One of: none, optional, required",
+			Validators: []validator.String{
+				stringvalidator.OneOf("none", "optional", "required"),
+			},
+		},
+		"ocsp_url": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "OCSP URL",
+		},
+		"override_cert_url": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Override OCSP URL from Client",
+		},
+		"encryption_scheme": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Enable Aruba-SSO",
+		},
+		"allow_unknown_clients": schema.BoolAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Allow Unknown End-Hosts",
+		},
+		"pass_reset_flow": schema.StringAttribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Password reset sends in",
+		},
+		"no_of_retries": schema.Int64Attribute{
+			Optional:            true,
+			Computed:            true,
+			MarkdownDescription: "Number of retries",
+		},
+	}
+}
+
+// authMethodResourceModelV0 is the resource model for schema version 0, when
+// details was a list nested block.
+type authMethodResourceModelV0 struct {
+	ID           types.String             `tfsdk:"id"`
+	Name         types.String             `tfsdk:"name"`
+	Description  types.String             `tfsdk:"description"`
+	MethodType   types.String             `tfsdk:"method_type"`
+	InnerMethods types.List               `tfsdk:"inner_methods"`
+	Details      []AuthMethodDetailsModel `tfsdk:"details"`
+}
+
+func authMethodSchemaV0() schema.Schema {
+	return schema.Schema{
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
+			"name": schema.StringAttribute{
+				Required: true,
+			},
+			"description": schema.StringAttribute{
+				Optional: true,
+				Computed: true,
+			},
+			"method_type": schema.StringAttribute{
+				Required: true,
+			},
+			"inner_methods": schema.ListAttribute{
+				ElementType: types.StringType,
+				Optional:    true,
+				Computed:    true,
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"details": schema.ListNestedBlock{
+				NestedObject: schema.NestedBlockObject{
+					Attributes: authMethodDetailsAttributes(),
+				},
+			},
+		},
+	}
+}
+
+func upgradeAuthMethodStateV0(ctx context.Context, prior authMethodResourceModelV0) (AuthMethodResourceModel, diag.Diagnostics) {
+	upgraded := AuthMethodResourceModel{
+		ID:           prior.ID,
+		Name:         prior.Name,
+		Description:  prior.Description,
+		MethodType:   prior.MethodType,
+		InnerMethods: prior.InnerMethods,
+		Details:      types.ObjectNull(authMethodDetailsAttrTypes),
+	}
+
+	if len(prior.Details) == 0 {
+		return upgraded, nil
+	}
+
+	details, diags := types.ObjectValueFrom(ctx, authMethodDetailsAttrTypes, prior.Details[0])
+	if diags.HasError() {
+		return upgraded, diags
+	}
+
+	upgraded.Details = details
+	return upgraded, nil
+}
+
+func detailsFromAPI(apiDetails *client.AuthMethodDetails, config AuthMethodDetailsModel) AuthMethodDetailsModel {
+	return AuthMethodDetailsModel{
+		TunnelPACLifetime:                 getValueInt64(config.TunnelPACLifetime, int64(apiDetails.TunnelPACLifetime)),
+		TunnelPACLifetimeUnits:            getValueString(config.TunnelPACLifetimeUnits, apiDetails.TunnelPACLifetimeUnits),
+		UserAuthPACEnable:                 getValueBool(config.UserAuthPACEnable, bool(apiDetails.UserAuthPACEnable)),
+		UserAuthPACLifetime:               getValueInt64(config.UserAuthPACLifetime, int64(apiDetails.UserAuthPACLifetime)),
+		UserAuthPACLifetimeUnits:          getValueString(config.UserAuthPACLifetimeUnits, apiDetails.UserAuthPACLifetimeUnits),
+		MachinePACEnable:                  getValueBool(config.MachinePACEnable, bool(apiDetails.MachinePACEnable)),
+		MachinePACLifetime:                getValueInt64(config.MachinePACLifetime, int64(apiDetails.MachinePACLifetime)),
+		MachinePACLifetimeUnits:           getValueString(config.MachinePACLifetimeUnits, apiDetails.MachinePACLifetimeUnits),
+		PosturePACEnable:                  getValueBool(config.PosturePACEnable, bool(apiDetails.PosturePACEnable)),
+		PosturePACLifetime:                getValueInt64(config.PosturePACLifetime, int64(apiDetails.PosturePACLifetime)),
+		PosturePACLifetimeUnits:           getValueString(config.PosturePACLifetimeUnits, apiDetails.PosturePACLifetimeUnits),
+		AllowAnonymousProvisioning:        getValueBool(config.AllowAnonymousProvisioning, bool(apiDetails.AllowAnonymousProvisioning)),
+		AuthProvisioningRequireClientCert: getValueBool(config.AuthProvisioningRequireClientCert, bool(apiDetails.AuthProvisioningRequireClientCert)),
+		ClientCertificateAuth:             getValueBool(config.ClientCertificateAuth, bool(apiDetails.ClientCertificateAuth)),
+		AllowAuthenticatedProvisioning:    getValueBool(config.AllowAuthenticatedProvisioning, bool(apiDetails.AllowAuthenticatedProvisioning)),
+		CertificateComparison:             getValueString(config.CertificateComparison, apiDetails.CertificateComparison),
+		SessionTimeout:                    getValueInt64(config.SessionTimeout, int64(apiDetails.SessionTimeout)),
+		SessionCacheEnable:                getValueBool(config.SessionCacheEnable, bool(apiDetails.SessionCacheEnable)),
+		Challenge:                         getValueString(config.Challenge, apiDetails.Challenge),
+		AllowFastReconnect:                getValueBool(config.AllowFastReconnect, bool(apiDetails.AllowFastReconnect)),
+		NAPSupportEnable:                  getValueBool(config.NAPSupportEnable, bool(apiDetails.NAPSupportEnable)),
+		EnforceCryptoBinding:              getValueString(config.EnforceCryptoBinding, apiDetails.EnforceCryptoBinding),
+		PublicPassword:                    getValueString(config.PublicPassword, apiDetails.PublicPassword),
+		PublicUsername:                    getValueString(config.PublicUsername, apiDetails.PublicUsername),
+		GroupName:                         getValueString(config.GroupName, apiDetails.GroupName),
+		ServerID:                          getValueString(config.ServerID, apiDetails.ServerID),
+		AutzRequired:                      getValueBool(config.AutzRequired, bool(apiDetails.AutzRequired)),
+		OCSPEnable:                        getValueString(config.OCSPEnable, apiDetails.OCSPEnable),
+		OCSPURL:                           getValueString(config.OCSPURL, apiDetails.OCSPURL),
+		OverrideCertURL:                   getValueBool(config.OverrideCertURL, bool(apiDetails.OverrideCertURL)),
+		EncryptionScheme:                  getValueString(config.EncryptionScheme, apiDetails.EncryptionScheme),
+		AllowUnknownClients:               getValueBool(config.AllowUnknownClients, bool(apiDetails.AllowUnknownClients)),
+		PassResetFlow:                     getValueString(config.PassResetFlow, apiDetails.PassResetFlow),
+		NoOfRetries:                       getValueInt64(config.NoOfRetries, int64(apiDetails.NoOfRetries)),
+	}
+}
+
+func detailsToAPI(details AuthMethodDetailsModel) *client.AuthMethodDetails {
+	return &client.AuthMethodDetails{
+		TunnelPACLifetime:                 client.FlexInt(details.TunnelPACLifetime.ValueInt64()),
+		TunnelPACLifetimeUnits:            details.TunnelPACLifetimeUnits.ValueString(),
+		UserAuthPACEnable:                 client.FlexBool(details.UserAuthPACEnable.ValueBool()),
+		UserAuthPACLifetime:               client.FlexInt(details.UserAuthPACLifetime.ValueInt64()),
+		UserAuthPACLifetimeUnits:          details.UserAuthPACLifetimeUnits.ValueString(),
+		MachinePACEnable:                  client.FlexBool(details.MachinePACEnable.ValueBool()),
+		MachinePACLifetime:                client.FlexInt(details.MachinePACLifetime.ValueInt64()),
+		MachinePACLifetimeUnits:           details.MachinePACLifetimeUnits.ValueString(),
+		PosturePACEnable:                  client.FlexBool(details.PosturePACEnable.ValueBool()),
+		PosturePACLifetime:                client.FlexInt(details.PosturePACLifetime.ValueInt64()),
+		PosturePACLifetimeUnits:           details.PosturePACLifetimeUnits.ValueString(),
+		AllowAnonymousProvisioning:        client.FlexBool(details.AllowAnonymousProvisioning.ValueBool()),
+		AuthProvisioningRequireClientCert: client.FlexBool(details.AuthProvisioningRequireClientCert.ValueBool()),
+		ClientCertificateAuth:             client.FlexBool(details.ClientCertificateAuth.ValueBool()),
+		AllowAuthenticatedProvisioning:    client.FlexBool(details.AllowAuthenticatedProvisioning.ValueBool()),
+		CertificateComparison:             details.CertificateComparison.ValueString(),
+		SessionTimeout:                    client.FlexInt(details.SessionTimeout.ValueInt64()),
+		SessionCacheEnable:                client.FlexBool(details.SessionCacheEnable.ValueBool()),
+		Challenge:                         details.Challenge.ValueString(),
+		AllowFastReconnect:                client.FlexBool(details.AllowFastReconnect.ValueBool()),
+		NAPSupportEnable:                  client.FlexBool(details.NAPSupportEnable.ValueBool()),
+		EnforceCryptoBinding:              details.EnforceCryptoBinding.ValueString(),
+		PublicPassword:                    details.PublicPassword.ValueString(),
+		PublicUsername:                    details.PublicUsername.ValueString(),
+		GroupName:                         details.GroupName.ValueString(),
+		ServerID:                          details.ServerID.ValueString(),
+		AutzRequired:                      client.FlexBool(details.AutzRequired.ValueBool()),
+		OCSPEnable:                        details.OCSPEnable.ValueString(),
+		OCSPURL:                           details.OCSPURL.ValueString(),
+		OverrideCertURL:                   client.FlexBool(details.OverrideCertURL.ValueBool()),
+		EncryptionScheme:                  details.EncryptionScheme.ValueString(),
+		AllowUnknownClients:               client.FlexBool(details.AllowUnknownClients.ValueBool()),
+		PassResetFlow:                     details.PassResetFlow.ValueString(),
+		NoOfRetries:                       client.FlexInt(details.NoOfRetries.ValueInt64()),
+	}
+}
+
+func configuredDetails(ctx context.Context, obj types.Object) (AuthMethodDetailsModel, bool, diag.Diagnostics) {
+	var details AuthMethodDetailsModel
+
+	if obj.IsNull() || obj.IsUnknown() {
+		return details, false, nil
+	}
+
+	diags := obj.As(ctx, &details, basetypes.ObjectAsOptions{})
+
+	return details, !diags.HasError(), diags
+}
+
 func (r *AuthMethodResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_auth_method"
 }
@@ -86,6 +468,9 @@ func (r *AuthMethodResource) Schema(ctx context.Context, req resource.SchemaRequ
 	resp.Schema = schema.Schema{
 		// This description is used by the documentation generator and the language server.
 		MarkdownDescription: "Authentication Method Resource. Attention: The only tested auth method is EAP-TLS like in the example. Test against Dev/Lab environment first!",
+		// Version 0 stored details as a list nested block. Version 1 stores it as a
+		// single nested attribute. UpgradeState copies the first list element across.
+		Version: 1,
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
@@ -114,194 +499,14 @@ func (r *AuthMethodResource) Schema(ctx context.Context, req resource.SchemaRequ
 				Computed:            true,
 				MarkdownDescription: "List of inner methods for the authentication method. This is typically used for tunneled methods like EAP-PEAP or EAP-TTLS to specify the inner authentication protocol (e.g., 'EAP-MSCHAPv2').",
 			},
-		},
-		Blocks: map[string]schema.Block{
-			"details": schema.ListNestedBlock{
+			"details": schema.SingleNestedAttribute{
+				Optional:            true,
+				Computed:            true,
 				MarkdownDescription: "Configuration details specific to the authentication method type. The available fields depend on the selected `method_type`.",
-				NestedObject: schema.NestedBlockObject{
-					Attributes: map[string]schema.Attribute{
-						"tunnel_pac_lifetime": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Tunnel PAC Expire Time",
-						},
-						"tunnel_pac_lifetime_units": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Tunnel PAC Expire Time Units",
-						},
-						"user_auth_pac_enable": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Authorization PAC",
-						},
-						"user_auth_pac_lifetime": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Authorization PAC Expire Time",
-						},
-						"user_auth_pac_lifetime_units": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Authorization PAC Expire Time Units",
-						},
-						"machine_pac_enable": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Machine PAC",
-						},
-						"machine_pac_lifetime": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Machine PAC Expire Time",
-						},
-						"machine_pac_lifetime_units": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Machine PAC Expire Time Units",
-						},
-						"posture_pac_enable": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Posture PAC",
-						},
-						"posture_pac_lifetime": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Posture PAC Expire Time",
-						},
-						"posture_pac_lifetime_units": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Posture PAC Expire Time Units",
-						},
-						"allow_anonymous_provisioning": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Allow anonymous mode (requires no server certificate)",
-						},
-						"auth_provisioning_require_client_cert": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Require end-host certificate for provisioning",
-						},
-						"client_certificate_auth": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "End-Host Authentication",
-						},
-						"allow_authenticated_provisioning": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Allow authenticated mode (requires server certificate)",
-						},
-						"certificate_comparison": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Certificate Comparison. One of: none, dn, cn, san, cn_or_san, binary",
-							Validators: []validator.String{
-								stringvalidator.OneOf("none", "dn", "cn", "san", "cn_or_san", "binary"),
-							},
-						},
-						"session_timeout": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Session Timeout",
-						},
-						"session_cache_enable": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Session Resumption",
-						},
-						"challenge": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Challenge",
-						},
-						"allow_fast_reconnect": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Fast Reconnect",
-						},
-						"nap_support_enable": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Microsoft NAP Support",
-						},
-						"enforce_crypto_binding": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Cryptobinding. One of: none, optional, required",
-							Validators: []validator.String{
-								stringvalidator.OneOf("none", "optional", "required"),
-							},
-						},
-						"public_password": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							Sensitive:           true,
-							MarkdownDescription: "Public Password",
-						},
-						"public_username": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Public Username",
-						},
-						"group_name": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Group",
-						},
-						"server_id": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Server Id",
-						},
-						"autz_required": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Authorization Required. If enabled, the user must be authorized in addition to being authenticated.",
-						},
-						"ocsp_enable": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Verify Certificate using OCSP. One of: none, optional, required",
-							Validators: []validator.String{
-								stringvalidator.OneOf("none", "optional", "required"),
-							},
-						},
-						"ocsp_url": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "OCSP URL",
-						},
-						"override_cert_url": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Override OCSP URL from Client",
-						},
-						"encryption_scheme": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Enable Aruba-SSO",
-						},
-						"allow_unknown_clients": schema.BoolAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Allow Unknown End-Hosts",
-						},
-						"pass_reset_flow": schema.StringAttribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Password reset sends in",
-						},
-						"no_of_retries": schema.Int64Attribute{
-							Optional:            true,
-							Computed:            true,
-							MarkdownDescription: "Number of retries",
-						},
-					},
+				PlanModifiers: []planmodifier.Object{
+					objectplanmodifier.UseStateForUnknown(),
 				},
+				Attributes: authMethodDetailsAttributes(),
 			},
 		},
 	}
@@ -347,44 +552,14 @@ func (r *AuthMethodResource) Create(ctx context.Context, req resource.CreateRequ
 		authMethodCreate.InnerMethods = innerMethods
 	}
 
-	if len(data.Details) > 0 {
-		details := data.Details[0]
-		authMethodCreate.Details = &client.AuthMethodDetails{
-			TunnelPACLifetime:                 client.FlexInt(details.TunnelPACLifetime.ValueInt64()),
-			TunnelPACLifetimeUnits:            details.TunnelPACLifetimeUnits.ValueString(),
-			UserAuthPACEnable:                 client.FlexBool(details.UserAuthPACEnable.ValueBool()),
-			UserAuthPACLifetime:               client.FlexInt(details.UserAuthPACLifetime.ValueInt64()),
-			UserAuthPACLifetimeUnits:          details.UserAuthPACLifetimeUnits.ValueString(),
-			MachinePACEnable:                  client.FlexBool(details.MachinePACEnable.ValueBool()),
-			MachinePACLifetime:                client.FlexInt(details.MachinePACLifetime.ValueInt64()),
-			MachinePACLifetimeUnits:           details.MachinePACLifetimeUnits.ValueString(),
-			PosturePACEnable:                  client.FlexBool(details.PosturePACEnable.ValueBool()),
-			PosturePACLifetime:                client.FlexInt(details.PosturePACLifetime.ValueInt64()),
-			PosturePACLifetimeUnits:           details.PosturePACLifetimeUnits.ValueString(),
-			AllowAnonymousProvisioning:        client.FlexBool(details.AllowAnonymousProvisioning.ValueBool()),
-			AuthProvisioningRequireClientCert: client.FlexBool(details.AuthProvisioningRequireClientCert.ValueBool()),
-			ClientCertificateAuth:             client.FlexBool(details.ClientCertificateAuth.ValueBool()),
-			AllowAuthenticatedProvisioning:    client.FlexBool(details.AllowAuthenticatedProvisioning.ValueBool()),
-			CertificateComparison:             details.CertificateComparison.ValueString(),
-			SessionTimeout:                    client.FlexInt(details.SessionTimeout.ValueInt64()),
-			SessionCacheEnable:                client.FlexBool(details.SessionCacheEnable.ValueBool()),
-			Challenge:                         details.Challenge.ValueString(),
-			AllowFastReconnect:                client.FlexBool(details.AllowFastReconnect.ValueBool()),
-			NAPSupportEnable:                  client.FlexBool(details.NAPSupportEnable.ValueBool()),
-			EnforceCryptoBinding:              details.EnforceCryptoBinding.ValueString(),
-			PublicPassword:                    details.PublicPassword.ValueString(),
-			PublicUsername:                    details.PublicUsername.ValueString(),
-			GroupName:                         details.GroupName.ValueString(),
-			ServerID:                          details.ServerID.ValueString(),
-			AutzRequired:                      client.FlexBool(details.AutzRequired.ValueBool()),
-			OCSPEnable:                        details.OCSPEnable.ValueString(),
-			OCSPURL:                           details.OCSPURL.ValueString(),
-			OverrideCertURL:                   client.FlexBool(details.OverrideCertURL.ValueBool()),
-			EncryptionScheme:                  details.EncryptionScheme.ValueString(),
-			AllowUnknownClients:               client.FlexBool(details.AllowUnknownClients.ValueBool()),
-			PassResetFlow:                     details.PassResetFlow.ValueString(),
-			NoOfRetries:                       client.FlexInt(details.NoOfRetries.ValueInt64()),
-		}
+	planDetails, planHasDetails, detailsDiags := configuredDetails(ctx, data.Details)
+	resp.Diagnostics.Append(detailsDiags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if planHasDetails {
+		authMethodCreate.Details = detailsToAPI(planDetails)
 	}
 
 	// Call API
@@ -394,9 +569,6 @@ func (r *AuthMethodResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	// Remember whether the plan originally had a details block
-	planHadDetails := len(data.Details) > 0
-
 	// Update state with result
 	data.ID = types.StringValue(strconv.Itoa(result.ID))
 	data.Name = types.StringValue(result.Name)
@@ -404,64 +576,25 @@ func (r *AuthMethodResource) Create(ctx context.Context, req resource.CreateRequ
 	data.MethodType = types.StringValue(result.MethodType)
 
 	if len(result.InnerMethods) > 0 {
-		innerMethods, _ := types.ListValueFrom(ctx, types.StringType, result.InnerMethods)
+		innerMethods, innerMethodsDiags := types.ListValueFrom(ctx, types.StringType, result.InnerMethods)
+		resp.Diagnostics.Append(innerMethodsDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		data.InnerMethods = innerMethods
 	} else {
 		data.InnerMethods = types.ListNull(types.StringType)
 	}
 
-	// Only populate Details in state if the plan originally had a details block.
-	// The API always returns details, but if the user didn't specify one in HCL,
-	// setting it in state would cause "block count changed from 0 to 1" error.
-	if result.Details != nil && planHadDetails {
-		var planDetails AuthMethodDetailsModel
-		if len(data.Details) > 0 {
-			planDetails = data.Details[0]
+	if result.Details != nil {
+		details, detailsObjDiags := types.ObjectValueFrom(ctx, authMethodDetailsAttrTypes, detailsFromAPI(result.Details, planDetails))
+		resp.Diagnostics.Append(detailsObjDiags...)
+		if resp.Diagnostics.HasError() {
+			return
 		}
-
-		tflog.Debug(ctx, "DEBUG: AutzRequired Plan Value", map[string]interface{}{"value": planDetails.AutzRequired.ValueBool()})
-		tflog.Debug(ctx, "DEBUG: AutzRequired API Value", map[string]interface{}{"value": bool(result.Details.AutzRequired)})
-
-		details := AuthMethodDetailsModel{
-			TunnelPACLifetime:                 getValueInt64(planDetails.TunnelPACLifetime, int64(result.Details.TunnelPACLifetime)),
-			TunnelPACLifetimeUnits:            getValueString(planDetails.TunnelPACLifetimeUnits, result.Details.TunnelPACLifetimeUnits),
-			UserAuthPACEnable:                 getValueBool(planDetails.UserAuthPACEnable, bool(result.Details.UserAuthPACEnable)),
-			UserAuthPACLifetime:               getValueInt64(planDetails.UserAuthPACLifetime, int64(result.Details.UserAuthPACLifetime)),
-			UserAuthPACLifetimeUnits:          getValueString(planDetails.UserAuthPACLifetimeUnits, result.Details.UserAuthPACLifetimeUnits),
-			MachinePACEnable:                  getValueBool(planDetails.MachinePACEnable, bool(result.Details.MachinePACEnable)),
-			MachinePACLifetime:                getValueInt64(planDetails.MachinePACLifetime, int64(result.Details.MachinePACLifetime)),
-			MachinePACLifetimeUnits:           getValueString(planDetails.MachinePACLifetimeUnits, result.Details.MachinePACLifetimeUnits),
-			PosturePACEnable:                  getValueBool(planDetails.PosturePACEnable, bool(result.Details.PosturePACEnable)),
-			PosturePACLifetime:                getValueInt64(planDetails.PosturePACLifetime, int64(result.Details.PosturePACLifetime)),
-			PosturePACLifetimeUnits:           getValueString(planDetails.PosturePACLifetimeUnits, result.Details.PosturePACLifetimeUnits),
-			AllowAnonymousProvisioning:        getValueBool(planDetails.AllowAnonymousProvisioning, bool(result.Details.AllowAnonymousProvisioning)),
-			AuthProvisioningRequireClientCert: getValueBool(planDetails.AuthProvisioningRequireClientCert, bool(result.Details.AuthProvisioningRequireClientCert)),
-			ClientCertificateAuth:             getValueBool(planDetails.ClientCertificateAuth, bool(result.Details.ClientCertificateAuth)),
-			AllowAuthenticatedProvisioning:    getValueBool(planDetails.AllowAuthenticatedProvisioning, bool(result.Details.AllowAuthenticatedProvisioning)),
-			CertificateComparison:             getValueString(planDetails.CertificateComparison, result.Details.CertificateComparison),
-			SessionTimeout:                    getValueInt64(planDetails.SessionTimeout, int64(result.Details.SessionTimeout)),
-			SessionCacheEnable:                getValueBool(planDetails.SessionCacheEnable, bool(result.Details.SessionCacheEnable)),
-			Challenge:                         getValueString(planDetails.Challenge, result.Details.Challenge),
-			AllowFastReconnect:                getValueBool(planDetails.AllowFastReconnect, bool(result.Details.AllowFastReconnect)),
-			NAPSupportEnable:                  getValueBool(planDetails.NAPSupportEnable, bool(result.Details.NAPSupportEnable)),
-			EnforceCryptoBinding:              getValueString(planDetails.EnforceCryptoBinding, result.Details.EnforceCryptoBinding),
-			PublicPassword:                    getValueString(planDetails.PublicPassword, result.Details.PublicPassword),
-			PublicUsername:                    getValueString(planDetails.PublicUsername, result.Details.PublicUsername),
-			GroupName:                         getValueString(planDetails.GroupName, result.Details.GroupName),
-			ServerID:                          getValueString(planDetails.ServerID, result.Details.ServerID),
-			AutzRequired:                      getValueBool(planDetails.AutzRequired, bool(result.Details.AutzRequired)),
-			OCSPEnable:                        getValueString(planDetails.OCSPEnable, result.Details.OCSPEnable),
-			OCSPURL:                           getValueString(planDetails.OCSPURL, result.Details.OCSPURL),
-			OverrideCertURL:                   getValueBool(planDetails.OverrideCertURL, bool(result.Details.OverrideCertURL)),
-			EncryptionScheme:                  getValueString(planDetails.EncryptionScheme, result.Details.EncryptionScheme),
-			AllowUnknownClients:               getValueBool(planDetails.AllowUnknownClients, bool(result.Details.AllowUnknownClients)),
-			PassResetFlow:                     getValueString(planDetails.PassResetFlow, result.Details.PassResetFlow),
-			NoOfRetries:                       getValueInt64(planDetails.NoOfRetries, int64(result.Details.NoOfRetries)),
-		}
-
-		data.Details = []AuthMethodDetailsModel{details}
+		data.Details = details
 	} else {
-		data.Details = nil
+		data.Details = types.ObjectNull(authMethodDetailsAttrTypes)
 	}
 
 	// Save data into Terraform state
@@ -477,7 +610,14 @@ func (r *AuthMethodResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	id, _ := strconv.Atoi(data.ID.ValueString())
+	id, err := strconv.Atoi(data.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid Auth Method ID",
+			fmt.Sprintf("Expected a numeric auth method ID, got: %q. Auth methods are imported by their numeric ID.", data.ID.ValueString()),
+		)
+		return
+	}
 
 	// Call API
 	result, err := r.client.GetAuthMethod(ctx, id)
@@ -497,57 +637,25 @@ func (r *AuthMethodResource) Read(ctx context.Context, req resource.ReadRequest,
 	data.MethodType = types.StringValue(result.MethodType)
 
 	if len(result.InnerMethods) > 0 {
-		innerMethods, _ := types.ListValueFrom(ctx, types.StringType, result.InnerMethods)
+		innerMethods, innerMethodsDiags := types.ListValueFrom(ctx, types.StringType, result.InnerMethods)
+		resp.Diagnostics.Append(innerMethodsDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		data.InnerMethods = innerMethods
 	} else {
 		data.InnerMethods = types.ListNull(types.StringType)
 	}
 
-	// Only populate Details in state if it was already present in prior state.
-	// The API always returns details, but if the state didn't have one,
-	// adding it would cause unwanted plan diffs.
-	stateHadDetails := len(data.Details) > 0
-
-	if result.Details != nil && stateHadDetails {
-		details := AuthMethodDetailsModel{
-			TunnelPACLifetime:                 types.Int64Value(int64(result.Details.TunnelPACLifetime)),
-			TunnelPACLifetimeUnits:            types.StringValue(result.Details.TunnelPACLifetimeUnits),
-			UserAuthPACEnable:                 types.BoolValue(bool(result.Details.UserAuthPACEnable)),
-			UserAuthPACLifetime:               types.Int64Value(int64(result.Details.UserAuthPACLifetime)),
-			UserAuthPACLifetimeUnits:          types.StringValue(result.Details.UserAuthPACLifetimeUnits),
-			MachinePACEnable:                  types.BoolValue(bool(result.Details.MachinePACEnable)),
-			MachinePACLifetime:                types.Int64Value(int64(result.Details.MachinePACLifetime)),
-			MachinePACLifetimeUnits:           types.StringValue(result.Details.MachinePACLifetimeUnits),
-			PosturePACEnable:                  types.BoolValue(bool(result.Details.PosturePACEnable)),
-			PosturePACLifetime:                types.Int64Value(int64(result.Details.PosturePACLifetime)),
-			PosturePACLifetimeUnits:           types.StringValue(result.Details.PosturePACLifetimeUnits),
-			AllowAnonymousProvisioning:        types.BoolValue(bool(result.Details.AllowAnonymousProvisioning)),
-			AuthProvisioningRequireClientCert: types.BoolValue(bool(result.Details.AuthProvisioningRequireClientCert)),
-			ClientCertificateAuth:             types.BoolValue(bool(result.Details.ClientCertificateAuth)),
-			AllowAuthenticatedProvisioning:    types.BoolValue(bool(result.Details.AllowAuthenticatedProvisioning)),
-			CertificateComparison:             types.StringValue(result.Details.CertificateComparison),
-			SessionTimeout:                    types.Int64Value(int64(result.Details.SessionTimeout)),
-			SessionCacheEnable:                types.BoolValue(bool(result.Details.SessionCacheEnable)),
-			Challenge:                         types.StringValue(result.Details.Challenge),
-			AllowFastReconnect:                types.BoolValue(bool(result.Details.AllowFastReconnect)),
-			NAPSupportEnable:                  types.BoolValue(bool(result.Details.NAPSupportEnable)),
-			EnforceCryptoBinding:              types.StringValue(result.Details.EnforceCryptoBinding),
-			PublicPassword:                    types.StringValue(result.Details.PublicPassword),
-			PublicUsername:                    types.StringValue(result.Details.PublicUsername),
-			GroupName:                         types.StringValue(result.Details.GroupName),
-			ServerID:                          types.StringValue(result.Details.ServerID),
-			AutzRequired:                      types.BoolValue(bool(result.Details.AutzRequired)),
-			OCSPEnable:                        types.StringValue(result.Details.OCSPEnable),
-			OCSPURL:                           types.StringValue(result.Details.OCSPURL),
-			OverrideCertURL:                   types.BoolValue(bool(result.Details.OverrideCertURL)),
-			EncryptionScheme:                  types.StringValue(result.Details.EncryptionScheme),
-			AllowUnknownClients:               types.BoolValue(bool(result.Details.AllowUnknownClients)),
-			PassResetFlow:                     types.StringValue(result.Details.PassResetFlow),
-			NoOfRetries:                       types.Int64Value(int64(result.Details.NoOfRetries)),
+	if result.Details != nil {
+		details, detailsDiags := types.ObjectValueFrom(ctx, authMethodDetailsAttrTypes, detailsFromAPI(result.Details, AuthMethodDetailsModel{}))
+		resp.Diagnostics.Append(detailsDiags...)
+		if resp.Diagnostics.HasError() {
+			return
 		}
-		data.Details = []AuthMethodDetailsModel{details}
-	} else if !stateHadDetails {
-		data.Details = nil
+		data.Details = details
+	} else {
+		data.Details = types.ObjectNull(authMethodDetailsAttrTypes)
 	}
 
 	// Save updated data into Terraform state
@@ -563,9 +671,10 @@ func (r *AuthMethodResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	var planDetails AuthMethodDetailsModel
-	if len(data.Details) > 0 {
-		planDetails = data.Details[0]
+	planDetails, planHasDetails, detailsDiags := configuredDetails(ctx, data.Details)
+	resp.Diagnostics.Append(detailsDiags...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	id, _ := strconv.Atoi(data.ID.ValueString())
@@ -583,44 +692,8 @@ func (r *AuthMethodResource) Update(ctx context.Context, req resource.UpdateRequ
 		authMethodUpdate.InnerMethods = innerMethods
 	}
 
-	if len(data.Details) > 0 {
-		details := data.Details[0]
-		authMethodUpdate.Details = &client.AuthMethodDetails{
-			TunnelPACLifetime:                 client.FlexInt(details.TunnelPACLifetime.ValueInt64()),
-			TunnelPACLifetimeUnits:            details.TunnelPACLifetimeUnits.ValueString(),
-			UserAuthPACEnable:                 client.FlexBool(details.UserAuthPACEnable.ValueBool()),
-			UserAuthPACLifetime:               client.FlexInt(details.UserAuthPACLifetime.ValueInt64()),
-			UserAuthPACLifetimeUnits:          details.UserAuthPACLifetimeUnits.ValueString(),
-			MachinePACEnable:                  client.FlexBool(details.MachinePACEnable.ValueBool()),
-			MachinePACLifetime:                client.FlexInt(details.MachinePACLifetime.ValueInt64()),
-			MachinePACLifetimeUnits:           details.MachinePACLifetimeUnits.ValueString(),
-			PosturePACEnable:                  client.FlexBool(details.PosturePACEnable.ValueBool()),
-			PosturePACLifetime:                client.FlexInt(details.PosturePACLifetime.ValueInt64()),
-			PosturePACLifetimeUnits:           details.PosturePACLifetimeUnits.ValueString(),
-			AllowAnonymousProvisioning:        client.FlexBool(details.AllowAnonymousProvisioning.ValueBool()),
-			AuthProvisioningRequireClientCert: client.FlexBool(details.AuthProvisioningRequireClientCert.ValueBool()),
-			ClientCertificateAuth:             client.FlexBool(details.ClientCertificateAuth.ValueBool()),
-			AllowAuthenticatedProvisioning:    client.FlexBool(details.AllowAuthenticatedProvisioning.ValueBool()),
-			CertificateComparison:             details.CertificateComparison.ValueString(),
-			SessionTimeout:                    client.FlexInt(details.SessionTimeout.ValueInt64()),
-			SessionCacheEnable:                client.FlexBool(details.SessionCacheEnable.ValueBool()),
-			Challenge:                         details.Challenge.ValueString(),
-			AllowFastReconnect:                client.FlexBool(details.AllowFastReconnect.ValueBool()),
-			NAPSupportEnable:                  client.FlexBool(details.NAPSupportEnable.ValueBool()),
-			EnforceCryptoBinding:              details.EnforceCryptoBinding.ValueString(),
-			PublicPassword:                    details.PublicPassword.ValueString(),
-			PublicUsername:                    details.PublicUsername.ValueString(),
-			GroupName:                         details.GroupName.ValueString(),
-			ServerID:                          details.ServerID.ValueString(),
-			AutzRequired:                      client.FlexBool(details.AutzRequired.ValueBool()),
-			OCSPEnable:                        details.OCSPEnable.ValueString(),
-			OCSPURL:                           details.OCSPURL.ValueString(),
-			OverrideCertURL:                   client.FlexBool(details.OverrideCertURL.ValueBool()),
-			EncryptionScheme:                  details.EncryptionScheme.ValueString(),
-			AllowUnknownClients:               client.FlexBool(details.AllowUnknownClients.ValueBool()),
-			PassResetFlow:                     details.PassResetFlow.ValueString(),
-			NoOfRetries:                       client.FlexInt(details.NoOfRetries.ValueInt64()),
-		}
+	if planHasDetails {
+		authMethodUpdate.Details = detailsToAPI(planDetails)
 	}
 
 	// Call API
@@ -639,143 +712,28 @@ func (r *AuthMethodResource) Update(ctx context.Context, req resource.UpdateRequ
 	data.MethodType = types.StringValue(result.MethodType)
 
 	if len(result.InnerMethods) > 0 {
-		innerMethods, _ := types.ListValueFrom(ctx, types.StringType, result.InnerMethods)
+		innerMethods, innerMethodsDiags := types.ListValueFrom(ctx, types.StringType, result.InnerMethods)
+		resp.Diagnostics.Append(innerMethodsDiags...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
 		data.InnerMethods = innerMethods
 	} else {
 		data.InnerMethods = types.ListNull(types.StringType)
 	}
 
-	// Remember whether the plan originally had a details block
-	planHadDetails := len(data.Details) > 0
-
-	if result.Details != nil && planHadDetails {
-		details := AuthMethodDetailsModel{
-			TunnelPACLifetime:                 getValueInt64(planDetails.TunnelPACLifetime, int64(result.Details.TunnelPACLifetime)),
-			TunnelPACLifetimeUnits:            getValueString(planDetails.TunnelPACLifetimeUnits, result.Details.TunnelPACLifetimeUnits),
-			UserAuthPACEnable:                 getValueBool(planDetails.UserAuthPACEnable, bool(result.Details.UserAuthPACEnable)),
-			UserAuthPACLifetime:               getValueInt64(planDetails.UserAuthPACLifetime, int64(result.Details.UserAuthPACLifetime)),
-			UserAuthPACLifetimeUnits:          getValueString(planDetails.UserAuthPACLifetimeUnits, result.Details.UserAuthPACLifetimeUnits),
-			MachinePACEnable:                  getValueBool(planDetails.MachinePACEnable, bool(result.Details.MachinePACEnable)),
-			MachinePACLifetime:                getValueInt64(planDetails.MachinePACLifetime, int64(result.Details.MachinePACLifetime)),
-			MachinePACLifetimeUnits:           getValueString(planDetails.MachinePACLifetimeUnits, result.Details.MachinePACLifetimeUnits),
-			PosturePACEnable:                  getValueBool(planDetails.PosturePACEnable, bool(result.Details.PosturePACEnable)),
-			PosturePACLifetime:                getValueInt64(planDetails.PosturePACLifetime, int64(result.Details.PosturePACLifetime)),
-			PosturePACLifetimeUnits:           getValueString(planDetails.PosturePACLifetimeUnits, result.Details.PosturePACLifetimeUnits),
-			AllowAnonymousProvisioning:        getValueBool(planDetails.AllowAnonymousProvisioning, bool(result.Details.AllowAnonymousProvisioning)),
-			AuthProvisioningRequireClientCert: getValueBool(planDetails.AuthProvisioningRequireClientCert, bool(result.Details.AuthProvisioningRequireClientCert)),
-			ClientCertificateAuth:             getValueBool(planDetails.ClientCertificateAuth, bool(result.Details.ClientCertificateAuth)),
-			AllowAuthenticatedProvisioning:    getValueBool(planDetails.AllowAuthenticatedProvisioning, bool(result.Details.AllowAuthenticatedProvisioning)),
-			CertificateComparison:             getValueString(planDetails.CertificateComparison, result.Details.CertificateComparison),
-			SessionTimeout:                    getValueInt64(planDetails.SessionTimeout, int64(result.Details.SessionTimeout)),
-			SessionCacheEnable:                getValueBool(planDetails.SessionCacheEnable, bool(result.Details.SessionCacheEnable)),
-			Challenge:                         getValueString(planDetails.Challenge, result.Details.Challenge),
-			AllowFastReconnect:                getValueBool(planDetails.AllowFastReconnect, bool(result.Details.AllowFastReconnect)),
-			NAPSupportEnable:                  getValueBool(planDetails.NAPSupportEnable, bool(result.Details.NAPSupportEnable)),
-			EnforceCryptoBinding:              getValueString(planDetails.EnforceCryptoBinding, result.Details.EnforceCryptoBinding),
-			PublicPassword:                    getValueString(planDetails.PublicPassword, result.Details.PublicPassword),
-			PublicUsername:                    getValueString(planDetails.PublicUsername, result.Details.PublicUsername),
-			GroupName:                         getValueString(planDetails.GroupName, result.Details.GroupName),
-			ServerID:                          getValueString(planDetails.ServerID, result.Details.ServerID),
-			AutzRequired:                      getValueBool(planDetails.AutzRequired, bool(result.Details.AutzRequired)),
-			OCSPEnable:                        getValueString(planDetails.OCSPEnable, result.Details.OCSPEnable),
-			OCSPURL:                           getValueString(planDetails.OCSPURL, result.Details.OCSPURL),
-			OverrideCertURL:                   getValueBool(planDetails.OverrideCertURL, bool(result.Details.OverrideCertURL)),
-			EncryptionScheme:                  getValueString(planDetails.EncryptionScheme, result.Details.EncryptionScheme),
-			AllowUnknownClients:               getValueBool(planDetails.AllowUnknownClients, bool(result.Details.AllowUnknownClients)),
-			PassResetFlow:                     getValueString(planDetails.PassResetFlow, result.Details.PassResetFlow),
-			NoOfRetries:                       getValueInt64(planDetails.NoOfRetries, int64(result.Details.NoOfRetries)),
+	if result.Details != nil {
+		details, detailsObjDiags := types.ObjectValueFrom(ctx, authMethodDetailsAttrTypes, detailsFromAPI(result.Details, planDetails))
+		resp.Diagnostics.Append(detailsObjDiags...)
+		if resp.Diagnostics.HasError() {
+			return
 		}
-		data.Details = []AuthMethodDetailsModel{details}
-	} else if !planHadDetails {
-		data.Details = nil
+		data.Details = details
+	} else {
+		data.Details = types.ObjectNull(authMethodDetailsAttrTypes)
 	}
 
-	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-}
-
-func (r *AuthMethodResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
-	// Skip if the plan is being destroyed
-	if req.Plan.Raw.IsNull() {
-		return
-	}
-
-	// Skip if the resource is being created (state is null)
-	if req.State.Raw.IsNull() {
-		return
-	}
-
-	var plan, state AuthMethodResourceModel
-	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
-
-	if resp.Diagnostics.HasError() {
-		return
-	}
-
-	// If details block exists in both plan and state
-	if len(plan.Details) > 0 && len(state.Details) > 0 {
-		planDetails := plan.Details[0]
-		stateDetails := state.Details[0]
-
-		// Helper to copy state to plan if plan is unknown and state is known
-		copyIfUnknown := func(planVal, stateVal interface{}) interface{} {
-			switch p := planVal.(type) {
-			case types.String:
-				if p.IsUnknown() && !stateVal.(types.String).IsNull() && !stateVal.(types.String).IsUnknown() {
-					return stateVal
-				}
-			case types.Bool:
-				if p.IsUnknown() && !stateVal.(types.Bool).IsNull() && !stateVal.(types.Bool).IsUnknown() {
-					return stateVal
-				}
-			case types.Int64:
-				if p.IsUnknown() && !stateVal.(types.Int64).IsNull() && !stateVal.(types.Int64).IsUnknown() {
-					return stateVal
-				}
-			}
-			return planVal
-		}
-
-		planDetails.TunnelPACLifetime = copyIfUnknown(planDetails.TunnelPACLifetime, stateDetails.TunnelPACLifetime).(types.Int64)
-		planDetails.TunnelPACLifetimeUnits = copyIfUnknown(planDetails.TunnelPACLifetimeUnits, stateDetails.TunnelPACLifetimeUnits).(types.String)
-		planDetails.UserAuthPACEnable = copyIfUnknown(planDetails.UserAuthPACEnable, stateDetails.UserAuthPACEnable).(types.Bool)
-		planDetails.UserAuthPACLifetime = copyIfUnknown(planDetails.UserAuthPACLifetime, stateDetails.UserAuthPACLifetime).(types.Int64)
-		planDetails.UserAuthPACLifetimeUnits = copyIfUnknown(planDetails.UserAuthPACLifetimeUnits, stateDetails.UserAuthPACLifetimeUnits).(types.String)
-		planDetails.MachinePACEnable = copyIfUnknown(planDetails.MachinePACEnable, stateDetails.MachinePACEnable).(types.Bool)
-		planDetails.MachinePACLifetime = copyIfUnknown(planDetails.MachinePACLifetime, stateDetails.MachinePACLifetime).(types.Int64)
-		planDetails.MachinePACLifetimeUnits = copyIfUnknown(planDetails.MachinePACLifetimeUnits, stateDetails.MachinePACLifetimeUnits).(types.String)
-		planDetails.PosturePACEnable = copyIfUnknown(planDetails.PosturePACEnable, stateDetails.PosturePACEnable).(types.Bool)
-		planDetails.PosturePACLifetime = copyIfUnknown(planDetails.PosturePACLifetime, stateDetails.PosturePACLifetime).(types.Int64)
-		planDetails.PosturePACLifetimeUnits = copyIfUnknown(planDetails.PosturePACLifetimeUnits, stateDetails.PosturePACLifetimeUnits).(types.String)
-		planDetails.AllowAnonymousProvisioning = copyIfUnknown(planDetails.AllowAnonymousProvisioning, stateDetails.AllowAnonymousProvisioning).(types.Bool)
-		planDetails.AuthProvisioningRequireClientCert = copyIfUnknown(planDetails.AuthProvisioningRequireClientCert, stateDetails.AuthProvisioningRequireClientCert).(types.Bool)
-		planDetails.ClientCertificateAuth = copyIfUnknown(planDetails.ClientCertificateAuth, stateDetails.ClientCertificateAuth).(types.Bool)
-		planDetails.AllowAuthenticatedProvisioning = copyIfUnknown(planDetails.AllowAuthenticatedProvisioning, stateDetails.AllowAuthenticatedProvisioning).(types.Bool)
-		planDetails.CertificateComparison = copyIfUnknown(planDetails.CertificateComparison, stateDetails.CertificateComparison).(types.String)
-		planDetails.SessionTimeout = copyIfUnknown(planDetails.SessionTimeout, stateDetails.SessionTimeout).(types.Int64)
-		planDetails.SessionCacheEnable = copyIfUnknown(planDetails.SessionCacheEnable, stateDetails.SessionCacheEnable).(types.Bool)
-		planDetails.Challenge = copyIfUnknown(planDetails.Challenge, stateDetails.Challenge).(types.String)
-		planDetails.AllowFastReconnect = copyIfUnknown(planDetails.AllowFastReconnect, stateDetails.AllowFastReconnect).(types.Bool)
-		planDetails.NAPSupportEnable = copyIfUnknown(planDetails.NAPSupportEnable, stateDetails.NAPSupportEnable).(types.Bool)
-		planDetails.EnforceCryptoBinding = copyIfUnknown(planDetails.EnforceCryptoBinding, stateDetails.EnforceCryptoBinding).(types.String)
-		planDetails.PublicPassword = copyIfUnknown(planDetails.PublicPassword, stateDetails.PublicPassword).(types.String)
-		planDetails.PublicUsername = copyIfUnknown(planDetails.PublicUsername, stateDetails.PublicUsername).(types.String)
-		planDetails.GroupName = copyIfUnknown(planDetails.GroupName, stateDetails.GroupName).(types.String)
-		planDetails.ServerID = copyIfUnknown(planDetails.ServerID, stateDetails.ServerID).(types.String)
-		planDetails.AutzRequired = copyIfUnknown(planDetails.AutzRequired, stateDetails.AutzRequired).(types.Bool)
-		planDetails.OCSPEnable = copyIfUnknown(planDetails.OCSPEnable, stateDetails.OCSPEnable).(types.String)
-		planDetails.OCSPURL = copyIfUnknown(planDetails.OCSPURL, stateDetails.OCSPURL).(types.String)
-		planDetails.OverrideCertURL = copyIfUnknown(planDetails.OverrideCertURL, stateDetails.OverrideCertURL).(types.Bool)
-		planDetails.EncryptionScheme = copyIfUnknown(planDetails.EncryptionScheme, stateDetails.EncryptionScheme).(types.String)
-		planDetails.AllowUnknownClients = copyIfUnknown(planDetails.AllowUnknownClients, stateDetails.AllowUnknownClients).(types.Bool)
-		planDetails.PassResetFlow = copyIfUnknown(planDetails.PassResetFlow, stateDetails.PassResetFlow).(types.String)
-		planDetails.NoOfRetries = copyIfUnknown(planDetails.NoOfRetries, stateDetails.NoOfRetries).(types.Int64)
-
-		plan.Details = []AuthMethodDetailsModel{planDetails}
-	}
-
-	resp.Diagnostics.Append(resp.Plan.Set(ctx, &plan)...)
 }
 
 func getValueString(plan types.String, apiVal string) types.String {
@@ -815,6 +773,32 @@ func (r *AuthMethodResource) Delete(ctx context.Context, req resource.DeleteRequ
 	if err != nil {
 		resp.Diagnostics.AddError("Client Error", fmt.Sprintf("Unable to delete auth method, got error: %s", err))
 		return
+	}
+}
+
+func (r *AuthMethodResource) UpgradeState(ctx context.Context) map[int64]resource.StateUpgrader {
+	priorSchema := authMethodSchemaV0()
+
+	return map[int64]resource.StateUpgrader{
+		0: {
+			PriorSchema: &priorSchema,
+			StateUpgrader: func(ctx context.Context, req resource.UpgradeStateRequest, resp *resource.UpgradeStateResponse) {
+				var prior authMethodResourceModelV0
+
+				resp.Diagnostics.Append(req.State.Get(ctx, &prior)...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+
+				upgraded, diags := upgradeAuthMethodStateV0(ctx, prior)
+				resp.Diagnostics.Append(diags...)
+				if resp.Diagnostics.HasError() {
+					return
+				}
+
+				resp.Diagnostics.Append(resp.State.Set(ctx, upgraded)...)
+			},
+		},
 	}
 }
 

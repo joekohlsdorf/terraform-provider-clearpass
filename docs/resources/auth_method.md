@@ -18,7 +18,7 @@ resource "clearpass_auth_method" "eap_tls" {
   description = "EAP-TLS Authentication Method for Corporate Devices"
   method_type = "EAP-TLS"
 
-  details {
+  details = {
     autz_required = true
     session_cache_enable = true
     session_timeout = 5
@@ -39,14 +39,14 @@ resource "clearpass_auth_method" "eap_tls" {
 ### Optional
 
 - `description` (String) Description of the authentication method. This helps administrators understand the purpose of the method.
-- `details` (Block List) Configuration details specific to the authentication method type. The available fields depend on the selected `method_type`. (see [below for nested schema](#nestedblock--details))
+- `details` (Attributes) Configuration details specific to the authentication method type. The available fields depend on the selected `method_type`. (see [below for nested schema](#nestedatt--details))
 - `inner_methods` (List of String) List of inner methods for the authentication method. This is typically used for tunneled methods like EAP-PEAP or EAP-TTLS to specify the inner authentication protocol (e.g., 'EAP-MSCHAPv2').
 
 ### Read-Only
 
 - `id` (String) Numeric ID of the auth method
 
-<a id="nestedblock--details"></a>
+<a id="nestedatt--details"></a>
 ### Nested Schema for `details`
 
 Optional:

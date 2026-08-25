@@ -28,10 +28,9 @@ resource "clearpass_auth_method" "test_auth_method" {
 			},
 			// ImportState testing
 			{
-				ResourceName:            "clearpass_auth_method.test_auth_method",
-				ImportState:             true,
-				ImportStateVerify:       true,
-				ImportStateVerifyIgnore: []string{"details"},
+				ResourceName:      "clearpass_auth_method.test_auth_method",
+				ImportState:       true,
+				ImportStateVerify: true,
 			},
 			// Update and Read testing
 			{

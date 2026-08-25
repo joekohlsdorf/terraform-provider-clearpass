@@ -3,7 +3,7 @@ resource "clearpass_auth_method" "eap_tls" {
   description = "EAP-TLS Authentication Method for Corporate Devices"
   method_type = "EAP-TLS"
 
-  details {
+  details = {
     autz_required = true
     session_cache_enable = true
     session_timeout = 5

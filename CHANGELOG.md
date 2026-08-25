@@ -15,9 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed an issue where `clearpass_network_device` would return an inconsistent result error when `onconnect_enforcement` was configured as disabled.
+- Fixed `clearpass_auth_method` import leaving `details` out of state, which made the first plan after an import propose an update with every field as "known after apply". `details` is now refreshed from the API on every read.
 
 ### Changed
 - Updated acceptance tests to address parameter validation and syntax issues.
+- **Breaking:** `clearpass_auth_method` `details` is now a nested attribute instead of a block. Configurations must change `details { ... }` to `details = { ... }`. Existing state is upgraded automatically from schema version 0 to 1.
 
 ### Notes
 - Updated provider internal dependencies.
